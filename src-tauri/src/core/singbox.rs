@@ -20,7 +20,7 @@ pub fn exe_name() -> &'static str {
 pub fn resolve_core_path(app: &AppHandle) -> Option<PathBuf> {
     let mut candidates: Vec<PathBuf> = Vec::new();
 
-    if let Ok(res) = app.path().resolve(CORE_SUBDIR, Some(BaseDirectory::Resource)) {
+    if let Ok(res) = app.path().resolve(CORE_SUBDIR, BaseDirectory::Resource) {
         candidates.push(res.join(exe_name()));
     }
     candidates.push(

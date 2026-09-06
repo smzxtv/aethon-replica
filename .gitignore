@@ -28,3 +28,6 @@ src-tauri/resources/sing-box/*
 !src-tauri/resources/sing-box/.gitkeep
 scripts/.cache/
 install.log
+
+*.log
+cargo_check.log

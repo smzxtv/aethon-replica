@@ -1,7 +1,9 @@
+import { useEffect } from "react";
+import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { useApp } from "../store";
-import { getAppInfo } from "../lib/core";
+import { connectClient, disconnectClient } from "../lib/core";
 import StatusBadge from "../components/StatusBadge";
-import type { ConnectionMode, Protocol, ScanMode } from "../types";
+import type { ConnectionMode, ConnectionState, Protocol, ScanMode } from "../types";
 
 const PROTOCOLS: { value: Protocol; label: string }[] = [
   { value: "auto", label: "Auto" },
@@ -21,35 +23,60 @@ const SCAN_MODES: { value: ScanMode; label: string }[] = [
 
 export default function ConnectPage() {
   const { state, dispatch } = useApp();
-  const { conn, status, profiles, logs } = state;
+  const { conn, status, profiles, logs, settings } = state;
   const selectedProfile = profiles.find((p) => p.id === conn.profileId);
+
+  useEffect(() => {
+    let cancelled = false;
+    const unlisteners: UnlistenFn[] = [];
+    listen<string>("core-log", (event) => {
+      if (!cancelled) dispatch({ type: "push-log", line: event.payload });
+    }).then((fn) => unlisteners.push(fn));
+    listen<string>("core-status", (event) => {
+      if (!cancelled)
+        dispatch({ type: "set-status", status: event.payload as ConnectionState });
+    }).then((fn) => unlisteners.push(fn));
+    listen<string>("core-exited", () => {
+      if (!cancelled) dispatch({ type: "set-status", status: "disconnected" });
+    }).then((fn) => unlisteners.push(fn));
+    return () => {
+      cancelled = true;
+      for (const fn of unlisteners) fn();
+    };
+  }, [dispatch]);
 
   async function handleConnect() {
     if (status === "connected") {
-      dispatch({ type: "set-status", status: "disconnected" });
-      dispatch({ type: "push-log", line: "[core] session torn down by user" });
+      try {
+        await disconnectClient();
+        dispatch({ type: "push-log", line: "[core] session torn down by user" });
+      } catch (err) {
+        dispatch({ type: "push-log", line: `[core] ${String(err)}` });
+      }
       return;
     }
+    if (!selectedProfile) {
+      dispatch({ type: "set-status", status: "error" });
+      dispatch({ type: "push-log", line: "[app] create a server profile first" });
+      return;
+    }
+    const protocol = conn.protocol === "auto" ? selectedProfile.protocol : conn.protocol;
     dispatch({ type: "set-status", status: "connecting" });
     dispatch({
       type: "push-log",
-      line: `[core] starting session (mode=${conn.mode}, protocol=${conn.protocol})…`,
+      line: `[core] starting session (mode=${conn.mode}, protocol=${protocol})…`,
     });
     try {
-      const info = await getAppInfo();
-      if (!info.core.corePresent) {
-        dispatch({ type: "set-status", status: "error" });
-        dispatch({ type: "push-log", line: "[core] sing-box not found — run `npm run fetch:core`" });
-        return;
-      }
-      dispatch({ type: "push-log", line: `[core] sing-box ${info.core.singBoxVersion} verified` });
-      dispatch({
-        type: "push-log",
-        line: `[route] ${
-          conn.mode === "vpn" ? "VPN (TUN)" : "SOCKS5"
-        } mode armed — real routing lands in Stage 1`,
+      await connectClient({
+        mode: conn.mode,
+        protocol,
+        address: selectedProfile.address,
+        port: selectedProfile.port,
+        params: selectedProfile.params,
+        socksPort: settings.socksPort,
+        logLevel: settings.logLevel,
       });
-      dispatch({ type: "set-status", status: "connected" });
+      // The authoritative status arrives over core-status / core-exited events.
     } catch (err) {
       dispatch({ type: "set-status", status: "error" });
       dispatch({ type: "push-log", line: `[core] ${String(err)}` });
