@@ -12,9 +12,20 @@ import type {
   ServerProfile,
 } from "./types";
 
+export interface PersistedPayload {
+  profiles: ServerProfile[];
+  selectedProfileId: string | null;
+  settings: GeneralSettings;
+  mode: ConnectionMode;
+  protocol: Protocol;
+  scanMode: ScanMode;
+}
+
 export interface AppModel {
   page: Page;
   appInfo: AppInfo | null;
+  /** false until the persisted state has been loaded from disk */
+  hydrated: boolean;
   profiles: ServerProfile[];
   conn: ConnectionSettings;
   status: ConnectionState;
@@ -25,6 +36,7 @@ export interface AppModel {
 export type Action =
   | { type: "set-page"; page: Page }
   | { type: "set-app-info"; info: AppInfo }
+  | { type: "hydrate"; state: Partial<PersistedPayload> }
   | { type: "add-profile"; profile: ServerProfile }
   | { type: "update-profile"; profile: ServerProfile }
   | { type: "remove-profile"; id: string }
@@ -40,17 +52,9 @@ export type Action =
 const initialState: AppModel = {
   page: "connect",
   appInfo: null,
-  profiles: [
-    {
-      id: "sample-1",
-      name: "Sample Shadowsocks",
-      protocol: "shadowsocks",
-      address: "example.com",
-      port: 8388,
-      params: { method: "aes-128-gcm", password: "change-me" },
-    },
-  ],
-  conn: { profileId: "sample-1", mode: "vpn", protocol: "auto", scanMode: "disabled" },
+  hydrated: false,
+  profiles: [],
+  conn: { profileId: null, mode: "vpn", protocol: "auto", scanMode: "disabled" },
   status: "disconnected",
   logs: ["[app] Aethon Replica ready"],
   settings: {
@@ -68,6 +72,19 @@ function reducer(state: AppModel, action: Action): AppModel {
       return { ...state, page: action.page };
     case "set-app-info":
       return { ...state, appInfo: action.info };
+    case "hydrate":
+      return {
+        ...state,
+        hydrated: true,
+        profiles: action.state.profiles ?? state.profiles,
+        conn: {
+          profileId: action.state.selectedProfileId ?? state.conn.profileId,
+          mode: action.state.mode ?? state.conn.mode,
+          protocol: action.state.protocol ?? state.conn.protocol,
+          scanMode: action.state.scanMode ?? state.conn.scanMode,
+        },
+        settings: { ...state.settings, ...action.state.settings },
+      };
     case "add-profile":
       return { ...state, profiles: [...state.profiles, action.profile] };
     case "update-profile":

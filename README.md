@@ -13,8 +13,8 @@ bundle the upstream *Aether* core. The network engine and routing engine is
 | Stage | Scope | Status |
 | --- | --- | --- |
 | 0 | Windows skeleton: Tauri v2 + React shell, three-part navigation, core fetch script | ✅ done |
-| 1 | SOCKS5 mode (`127.0.0.1:1819`) + VPN mode (TUN + protected routes), connect/disconnect, live diagnostics | 🔧 in progress — SOCKS5 verified end-to-end; VPN(TUN) coded, admin test pending |
-| 2 | Configurations persistence, split tunneling, auto-update (12 h) + manual check, SHA-256 + download, MSI/NSIS/portable packaging | ⏳ |
+| 1 | SOCKS5 mode (`127.0.0.1:1819`) + VPN mode (TUN + protected routes), connect/disconnect, UAC elevation, live diagnostics | 🔧 coded — SOCKS5 verified end-to-end; VPN config syntax verified, runtime test needs admin |
+| 2 | Configurations persistence (done), split tunneling, auto-update (12 h) + manual check, SHA-256 + download, MSI/NSIS/portable packaging | 🔧 in progress |
 | 3 | Android: native Kotlin + `VpnService`, Quick Settings tile, RTL (fa/en) | ⏳ |
 | 4 | Multi-arch Android packaging, `SHA256SUMS.txt`, GitHub Actions release pipeline | ⏳ |
 

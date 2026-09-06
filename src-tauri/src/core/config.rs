@@ -119,3 +119,74 @@ fn apply_tls(out: &mut Value, params: &HashMap<String, String>) {
     }
     out["tls"] = tls;
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn params(extra: HashMap<String, String>) -> ConnectParams {
+        let mut p = HashMap::new();
+        p.insert("password".into(), "secret".into());
+        p.extend(extra);
+        ConnectParams {
+            mode: "socks5".into(),
+            protocol: "shadowsocks".into(),
+            address: "example.com".into(),
+            port: 8388,
+            params: p,
+            socks_port: 1819,
+            log_level: "info".into(),
+        }
+    }
+
+    #[test]
+    fn socks5_inbound_and_listen_port() {
+        let cfg = build_config(&params(HashMap::new())).unwrap();
+        let inbound = &cfg["inbounds"][0];
+        assert_eq!(inbound["type"], "socks");
+        assert_eq!(inbound["listen_port"], 1819);
+        assert_eq!(cfg["route"]["final"], "proxy");
+    }
+
+    #[test]
+    fn vpn_mode_uses_tun_inbound() {
+        let mut p = params(HashMap::new());
+        p.mode = "vpn".into();
+        let cfg = build_config(&p).unwrap();
+        assert_eq!(cfg["inbounds"][0]["type"], "tun");
+        assert_eq!(cfg["inbounds"][0]["auto_route"], true);
+    }
+
+    #[test]
+    fn shadowsocks_outbound_carries_credentials() {
+        let cfg = build_config(&params(HashMap::new())).unwrap();
+        let out = &cfg["outbounds"][0];
+        assert_eq!(out["type"], "shadowsocks");
+        assert_eq!(out["method"], "aes-128-gcm");
+        assert_eq!(out["password"], "secret");
+        assert_eq!(out["server"], "example.com");
+        assert_eq!(out["server_port"], 8388);
+    }
+
+    #[test]
+    fn unknown_mode_or_protocol_is_rejected() {
+        let mut p = params(HashMap::new());
+        p.mode = "bogus".into();
+        assert!(build_config(&p).is_err());
+
+        let mut p2 = params(HashMap::new());
+        p2.protocol = "nope".into();
+        assert!(build_config(&p2).is_err());
+    }
+
+    #[test]
+    fn tls_protocols_get_tls_enabled() {
+        let mut p = params(HashMap::new());
+        p.protocol = "trojan".into();
+        p.params.insert("sni".into(), "cdn.example.com".into());
+        let cfg = build_config(&p).unwrap();
+        let out = &cfg["outbounds"][0];
+        assert_eq!(out["tls"]["enabled"], true);
+        assert_eq!(out["tls"]["server_name"], "cdn.example.com");
+    }
+}

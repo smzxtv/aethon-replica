@@ -476,6 +476,16 @@ button.danger-text {
   margin: 0;
 }
 
+.notice {
+  background: rgba(251, 191, 36, 0.12);
+  border: 1px solid rgba(251, 191, 36, 0.45);
+  color: #fde68a;
+  border-radius: 8px;
+  padding: 10px 14px;
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
 .about dt {
   color: var(--muted);
 }

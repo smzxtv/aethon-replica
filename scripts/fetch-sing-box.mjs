@@ -135,6 +135,30 @@ if (platform === "windows") {
     )
   );
   console.log(`installed core: ${join(destDir, "sing-box.exe")} (v${version})`);
+
+  // Windows TUN mode needs wintun.dll next to the core binary.
+  try {
+    const wintunUrl = "https://www.wintun.net/builds/wintun-0.14.1.zip";
+    console.log("fetching wintun.dll (TUN runtime)");
+    const wintunZip = join(cache, "wintun-0.14.1.zip");
+    await download(wintunUrl, wintunZip);
+    const wtDir = join(cache, "wintun");
+    mkdirSync(wtDir, { recursive: true });
+    spawnSync("tar", ["-xf", wintunZip, "-C", wtDir], { stdio: "inherit" });
+    const dllCandidates = [
+      join(wtDir, "wintun", "bin", "amd64", "wintun.dll"),
+      join(wtDir, "amd64", "wintun.dll"),
+    ];
+    const dll = dllCandidates.find((p) => existsSync(p));
+    if (dll) {
+      writeFileSync(join(destDir, "wintun.dll"), readFileSync(dll));
+      console.log("installed wintun.dll (amd64)");
+    } else {
+      console.warn("warn wintun.dll not found in downloaded archive layout");
+    }
+  } catch (e) {
+    console.warn(`warn could not fetch wintun.dll (${e}); VPN/TUN mode will need it`);
+  }
 } else if (platform === "android") {
   const arches = ["arm64-v8a", "armeabi-v7a", "x86_64"];
   for (const arch of arches) {

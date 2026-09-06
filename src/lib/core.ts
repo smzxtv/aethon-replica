@@ -1,4 +1,11 @@
 import { invoke } from "@tauri-apps/api/core";
+import type {
+  ConnectionMode,
+  GeneralSettings,
+  Protocol,
+  ScanMode,
+  ServerProfile,
+} from "../types";
 
 export interface CoreInfo {
   singBoxVersion: string;
@@ -36,4 +43,41 @@ export function connectClient(req: ConnectRequest): Promise<void> {
 /** Tear down the active session. */
 export function disconnectClient(): Promise<void> {
   return invoke<void>("disconnect");
+}
+
+/** Result of an elevation request for VPN mode. */
+export type ElevationStatus = "elevated" | "relaunching";
+
+/** Ensure the process runs elevated (relaunches via UAC if needed). */
+export function ensureVpnElevation(): Promise<ElevationStatus> {
+  return invoke<ElevationStatus>("ensure_vpn_elevation");
+}
+
+/** Probe TCP reachability of a server endpoint. */
+export function testEndpoint(address: string, port: number): Promise<string> {
+  return invoke<string>("test_endpoint", { address, port });
+}
+
+/** Stop any session and flush the DNS cache. */
+export function recoverNetwork(): Promise<string> {
+  return invoke<string>("recover_network");
+}
+
+export interface PersistedPayload {
+  profiles: ServerProfile[];
+  selectedProfileId: string | null;
+  settings: GeneralSettings;
+  mode: ConnectionMode;
+  protocol: Protocol;
+  scanMode: ScanMode;
+}
+
+/** Load previously persisted frontend state. */
+export function loadAppState(): Promise<PersistedPayload> {
+  return invoke<PersistedPayload>("load_app_state");
+}
+
+/** Persist frontend state so it survives restarts. */
+export function saveAppState(payload: PersistedPayload): Promise<void> {
+  return invoke<void>("save_app_state", { state: payload });
 }

@@ -16,7 +16,12 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             commands::get_app_info,
             commands::connect,
-            commands::disconnect
+            commands::disconnect,
+            commands::load_app_state,
+            commands::save_app_state,
+            commands::ensure_vpn_elevation,
+            commands::test_endpoint,
+            commands::recover_network
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

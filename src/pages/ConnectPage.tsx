@@ -1,7 +1,13 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { useApp } from "../store";
-import { connectClient, disconnectClient } from "../lib/core";
+import {
+  connectClient,
+  disconnectClient,
+  ensureVpnElevation,
+  recoverNetwork,
+  testEndpoint,
+} from "../lib/core";
 import StatusBadge from "../components/StatusBadge";
 import type { ConnectionMode, ConnectionState, Protocol, ScanMode } from "../types";
 
@@ -25,6 +31,7 @@ export default function ConnectPage() {
   const { state, dispatch } = useApp();
   const { conn, status, profiles, logs, settings } = state;
   const selectedProfile = profiles.find((p) => p.id === conn.profileId);
+  const [elevating, setElevating] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -60,6 +67,23 @@ export default function ConnectPage() {
       dispatch({ type: "push-log", line: "[app] create a server profile first" });
       return;
     }
+    if (conn.mode === "vpn") {
+      try {
+        const elev = await ensureVpnElevation();
+        if (elev !== "elevated") {
+          setElevating(true);
+          dispatch({
+            type: "push-log",
+            line: "[app] administrator privileges requested — please confirm the UAC prompt",
+          });
+          return;
+        }
+      } catch (err) {
+        dispatch({ type: "set-status", status: "error" });
+        dispatch({ type: "push-log", line: `[app] elevation failed: ${String(err)}` });
+        return;
+      }
+    }
     const protocol = conn.protocol === "auto" ? selectedProfile.protocol : conn.protocol;
     dispatch({ type: "set-status", status: "connecting" });
     dispatch({
@@ -80,6 +104,27 @@ export default function ConnectPage() {
     } catch (err) {
       dispatch({ type: "set-status", status: "error" });
       dispatch({ type: "push-log", line: `[core] ${String(err)}` });
+    }
+  }
+
+  async function testConnection() {
+    if (!selectedProfile) return;
+    dispatch({ type: "push-log", line: `[diag] testing ${selectedProfile.address}:${selectedProfile.port}…` });
+    try {
+      const result = await testEndpoint(selectedProfile.address, selectedProfile.port);
+      dispatch({ type: "push-log", line: `[diag] ${result}` });
+    } catch (err) {
+      dispatch({ type: "push-log", line: `[diag] ${String(err)}` });
+    }
+  }
+
+  async function recover() {
+    dispatch({ type: "push-log", line: "[diag] recovering network…" });
+    try {
+      const result = await recoverNetwork();
+      dispatch({ type: "push-log", line: `[diag] ${result}` });
+    } catch (err) {
+      dispatch({ type: "push-log", line: `[diag] ${String(err)}` });
     }
   }
 
@@ -175,6 +220,13 @@ export default function ConnectPage() {
         )}
       </section>
 
+      {elevating && (
+        <div className="notice">
+          Administrator privileges were requested — please confirm the UAC prompt. The app will
+          restart elevated, then press Connect again.
+        </div>
+      )}
+
       <div className="connect-row">
         <button
           className={`connect-btn ${status === "connected" ? "danger" : ""}`}
@@ -188,10 +240,10 @@ export default function ConnectPage() {
         <div className="diag-head">
           <h2>Diagnostics</h2>
           <div className="diag-actions">
-            <button className="ghost" disabled title="Arrives in Stage 1">
+            <button className="ghost" onClick={testConnection} disabled={!selectedProfile}>
               Test connection
             </button>
-            <button className="ghost" disabled title="Arrives in Stage 1">
+            <button className="ghost" onClick={recover}>
               Recover network
             </button>
             <button className="ghost" onClick={() => dispatch({ type: "clear-logs" })}>

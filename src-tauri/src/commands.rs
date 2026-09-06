@@ -37,6 +37,74 @@ pub struct ConnectRequest {
     pub log_level: String,
 }
 
+/// Server profile, mirrored from the frontend store for persistence.
+#[derive(Serialize, Deserialize, Clone, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct PersistedProfile {
+    pub id: String,
+    pub name: String,
+    pub protocol: String,
+    pub address: String,
+    pub port: u16,
+    pub params: HashMap<String, String>,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct PersistedSettings {
+    pub socks_port: u16,
+    pub log_level: String,
+    pub auto_update: bool,
+    pub auto_update_hours: u32,
+    pub auto_download: bool,
+}
+
+impl Default for PersistedSettings {
+    fn default() -> Self {
+        Self {
+            socks_port: 1819,
+            log_level: "info".into(),
+            auto_update: true,
+            auto_update_hours: 12,
+            auto_download: false,
+        }
+    }
+}
+
+/// Whole frontend state that survives restarts.
+#[derive(Serialize, Deserialize, Clone, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct PersistedState {
+    pub profiles: Vec<PersistedProfile>,
+    pub selected_profile_id: Option<String>,
+    pub settings: PersistedSettings,
+    pub mode: String,
+    pub protocol: String,
+    pub scan_mode: String,
+}
+
+impl Default for PersistedState {
+    fn default() -> Self {
+        Self {
+            profiles: vec![],
+            selected_profile_id: None,
+            settings: PersistedSettings::default(),
+            mode: "vpn".into(),
+            protocol: "auto".into(),
+            scan_mode: "disabled".into(),
+        }
+    }
+}
+
+fn state_file_path(app: &AppHandle) -> Result<std::path::PathBuf, String> {
+    let dir = app
+        .path()
+        .app_config_dir()
+        .map_err(|e| format!("cannot resolve config dir: {e}"))?;
+    std::fs::create_dir_all(&dir).map_err(|e| format!("cannot create config dir: {e}"))?;
+    Ok(dir.join("app-state.json"))
+}
+
 /// Reports application metadata plus the state of the bundled sing-box core.
 #[tauri::command]
 pub fn get_app_info(app: AppHandle) -> AppInfo {
@@ -79,6 +147,11 @@ pub fn get_app_info(app: AppHandle) -> AppInfo {
 /// `core-log` and process exit over `core-exited`.
 #[tauri::command]
 pub fn connect(app: AppHandle, req: ConnectRequest) -> Result<(), String> {
+    #[cfg(windows)]
+    if req.mode == "vpn" && !crate::core::elevate::is_elevated() {
+        return Err("VPN mode requires administrator privileges — click Connect again to elevate".to_string());
+    }
+
     {
         let state = app.state::<AppState>();
         let guard = state.session.lock().unwrap();
@@ -138,4 +211,103 @@ pub fn disconnect(app: AppHandle) -> Result<(), String> {
     }
     let _ = app.emit("core-status", "disconnected");
     Ok(())
+}
+
+/// Load previously persisted frontend state (profiles, settings, selection).
+#[tauri::command]
+pub fn load_app_state(app: AppHandle) -> PersistedState {
+    match state_file_path(&app) {
+        Ok(path) => std::fs::read_to_string(path)
+            .ok()
+            .and_then(|s| serde_json::from_str(&s).ok())
+            .unwrap_or_default(),
+        Err(_) => PersistedState::default(),
+    }
+}
+
+/// Persist frontend state so it survives restarts.
+#[tauri::command]
+pub fn save_app_state(app: AppHandle, state: PersistedState) -> Result<(), String> {
+    let path = state_file_path(&app)?;
+    let json = serde_json::to_string_pretty(&state)
+        .map_err(|e| format!("cannot serialize state: {e}"))?;
+    std::fs::write(path, json).map_err(|e| format!("cannot write state: {e}"))
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum ElevationStatus {
+    Elevated,
+    Relaunching,
+}
+
+/// Ensure the process is running elevated for VPN (TUN) mode. If not, relaunch
+/// the app via UAC and exit this copy; the frontend shows a notice meanwhile.
+#[tauri::command]
+pub fn ensure_vpn_elevation(app: AppHandle) -> Result<ElevationStatus, String> {
+    if crate::core::elevate::is_elevated() {
+        return Ok(ElevationStatus::Elevated);
+    }
+    match crate::core::elevate::relaunch_elevated() {
+        Ok(true) => {
+            let _ = app.emit("elevation-relaunching", ());
+            let app2 = app.clone();
+            std::thread::spawn(move || {
+                std::thread::sleep(std::time::Duration::from_millis(800));
+                app2.exit(0);
+            });
+            Ok(ElevationStatus::Relaunching)
+        }
+        Ok(false) => Err("elevation was requested but not confirmed".to_string()),
+        Err(e) => Err(e),
+    }
+}
+
+/// Probe TCP reachability of a server endpoint (used by the Test button).
+#[tauri::command]
+pub fn test_endpoint(address: String, port: u16) -> Result<String, String> {
+    use std::net::{SocketAddr, ToSocketAddrs};
+    use std::time::Duration;
+
+    let host = format!("{address}:{port}");
+    let addrs: Vec<SocketAddr> = host
+        .to_socket_addrs()
+        .map_err(|e| format!("cannot resolve {address}: {e}"))?
+        .collect();
+    if addrs.is_empty() {
+        return Err(format!("{address} resolved to no addresses"));
+    }
+    for addr in addrs {
+        if std::net::TcpStream::connect_timeout(&addr, Duration::from_secs(8)).is_ok() {
+            return Ok(format!("{address}:{port} reachable ({addr})"));
+        }
+    }
+    Err(format!("{address}:{port} unreachable"))
+}
+
+/// Stop any active session and flush the local DNS cache.
+#[tauri::command]
+pub fn recover_network(app: AppHandle) -> Result<String, String> {
+    let session = {
+        let state = app.state::<AppState>();
+        let mut guard = state.session.lock().unwrap();
+        guard.take()
+    };
+    if let Some(s) = session {
+        let _ = s.kill();
+    }
+    let _ = app.emit("core-status", "disconnected");
+
+    #[cfg(windows)]
+    {
+        match std::process::Command::new("ipconfig").arg("/flushdns").output() {
+            Ok(o) if o.status.success() => Ok("session stopped; DNS cache flushed".to_string()),
+            Ok(o) => Ok(format!("session stopped; ipconfig exited with {o:?}")),
+            Err(e) => Ok(format!("session stopped; ipconfig unavailable: {e}")),
+        }
+    }
+    #[cfg(not(windows))]
+    {
+        Ok("session stopped".to_string())
+    }
 }
