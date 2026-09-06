@@ -11,8 +11,14 @@ use std::path::Path;
 
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
+use tauri::{Manager, Emitter};
 
-pub const UPDATE_REPO: &str = option_env!("AETHON_REPLICA_UPDATE_REPO").unwrap_or("");
+/// The update source `owner/repo`. Configured at build time through the
+/// `AETHON_REPLICA_UPDATE_REPO` environment variable (e.g. `me/aethon-replica`).
+/// When unset, update checks report a clear "not configured" error.
+pub fn update_repo() -> &'static str {
+    option_env!("AETHON_REPLICA_UPDATE_REPO").unwrap_or("")
+}
 
 const USER_AGENT: &str = "aethon-replica-updater/2.0";
 
@@ -61,7 +67,8 @@ pub struct DownloadResult {
     pub launched: bool,
 }
 fn repo_configured() -> Result<(), String> {
-    if UPDATE_REPO.is_empty() || !UPDATE_REPO.contains('/') {
+    let repo = update_repo();
+    if repo.is_empty() || !repo.contains('/') {
         return Err(
             "update source not configured (set AETHON_REPLICA_UPDATE_REPO=\"owner/repo\")"
                 .to_string(),
@@ -71,7 +78,7 @@ fn repo_configured() -> Result<(), String> {
 }
 
 fn fetch_latest() -> Result<GhRelease, String> {
-    let url = format!("https://api.github.com/repos/{UPDATE_REPO}/releases/latest");
+    let url = format!("https://api.github.com/repos/{}/releases/latest", update_repo());
     let body = ureq::get(&url)
         .set("User-Agent", USER_AGENT)
         .set("Accept", "application/vnd.github+json")
@@ -118,7 +125,7 @@ pub fn check(current_version: &str) -> Result<UpdateInfo, String> {
         })
         .collect();
     Ok(UpdateInfo {
-        update_repo: UPDATE_REPO.to_string(),
+        update_repo: update_repo().to_string(),
         latest_version: latest,
         published_at: rel.published_at,
         release_notes: rel.body,

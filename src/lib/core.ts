@@ -81,3 +81,44 @@ export function loadAppState(): Promise<PersistedPayload> {
 export function saveAppState(payload: PersistedPayload): Promise<void> {
   return invoke<void>("save_app_state", { state: payload });
 }
+
+// ---------------------------------------------------------------------------
+// Routing helpers (VPN/TUN mode)
+// ---------------------------------------------------------------------------
+
+export interface PreflightReport {
+  canStart: boolean;
+  elevated: boolean;
+  wintunAvailable: boolean;
+  staleAdapters: string[];
+  messages: string[];
+}
+
+export interface RoutingDiagnostics {
+  elevated: boolean;
+  wintunAvailable: boolean;
+  wintunPath: string | null;
+  activeTunAdapters: string[];
+  defaultRoutes: string[];
+  dnsServers: string[];
+}
+
+/** Pre-flight check before starting a TUN session. */
+export function routingPreflight(): Promise<PreflightReport> {
+  return invoke<PreflightReport>("routing_preflight");
+}
+
+/** Full routing snapshot for diagnostics. */
+export function routingDiagnostics(): Promise<RoutingDiagnostics> {
+  return invoke<RoutingDiagnostics>("routing_diagnostics");
+}
+
+/** Detect orphaned TUN adapters from crashed sessions. */
+export function routingRecover(): Promise<string[]> {
+  return invoke<string[]>("routing_recover");
+}
+
+/** Flush DNS cache and verify the default route. */
+export function routingCleanup(): Promise<Record<string, string>> {
+  return invoke<Record<string, string>>("routing_cleanup");
+}

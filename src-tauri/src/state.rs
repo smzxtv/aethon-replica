@@ -10,4 +10,6 @@ pub struct AppState {
     pub core_path: Mutex<Option<PathBuf>>,
     /// Active sing-box session, if any.
     pub session: Mutex<Option<CoreSession>>,
+    /// Connection mode of the active session ("vpn" | "socks5").
+    pub session_mode: Mutex<String>,
 }

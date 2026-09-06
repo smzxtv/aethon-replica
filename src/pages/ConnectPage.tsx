@@ -7,7 +7,12 @@ import {
   ensureVpnElevation,
   recoverNetwork,
   testEndpoint,
+  routingPreflight,
+  routingDiagnostics,
+  routingRecover,
+  routingCleanup,
 } from "../lib/core";
+import type { PreflightReport, RoutingDiagnostics } from "../lib/core";
 import StatusBadge from "../components/StatusBadge";
 import type { ConnectionMode, ConnectionState, Protocol, ScanMode } from "../types";
 
@@ -128,6 +133,66 @@ export default function ConnectPage() {
     }
   }
 
+  // ---------------------------------------------------------------------------
+  // Routing diagnostics (VPN/TUN mode)
+  // ---------------------------------------------------------------------------
+  const [routingInfo, setRoutingInfo] = useState<RoutingDiagnostics | null>(null);
+  const [preflightInfo, setPreflightInfo] = useState<PreflightReport | null>(null);
+
+  async function runPreflight() {
+    dispatch({ type: "push-log", line: "[routing] running pre-flight…" });
+    try {
+      const report = await routingPreflight();
+      setPreflightInfo(report);
+      dispatch({
+        type: "push-log",
+        line: `[routing] pre-flight: ${report.messages.join(" ")}`,
+      });
+    } catch (err) {
+      dispatch({ type: "push-log", line: `[routing] ${String(err)}` });
+    }
+  }
+
+  async function runRoutingDiagnostics() {
+    dispatch({ type: "push-log", line: "[routing] gathering diagnostics…" });
+    try {
+      const info = await routingDiagnostics();
+      setRoutingInfo(info);
+      dispatch({
+        type: "push-log",
+        line: `[routing] adapters=${info.activeTunAdapters.length} routes=${info.defaultRoutes.length} dns=${info.dnsServers.length}`,
+      });
+    } catch (err) {
+      dispatch({ type: "push-log", line: `[routing] ${String(err)}` });
+    }
+  }
+
+  async function runRoutingRecover() {
+    dispatch({ type: "push-log", line: "[routing] scanning for stale adapters…" });
+    try {
+      const stale = await routingRecover();
+      dispatch({
+        type: "push-log",
+        line: `[routing] ${stale.length === 0 ? "no orphaned adapters" : `found: ${stale.join(", ")}`}`,
+      });
+    } catch (err) {
+      dispatch({ type: "push-log", line: `[routing] ${String(err)}` });
+    }
+  }
+
+  async function runRoutingCleanup() {
+    dispatch({ type: "push-log", line: "[routing] cleaning up routes/DNS…" });
+    try {
+      const report = await routingCleanup();
+      dispatch({
+        type: "push-log",
+        line: `[routing] dns=${report.dns ?? "?"} route=${report.route ?? "?"} stale=${report.stale_adapters ?? "?"}`,
+      });
+    } catch (err) {
+      dispatch({ type: "push-log", line: `[routing] ${String(err)}` });
+    }
+  }
+
   return (
     <div className="page">
       <header className="page-head">
@@ -235,6 +300,56 @@ export default function ConnectPage() {
           {status === "connected" ? "Disconnect" : "Connect"}
         </button>
       </div>
+
+      <section className="card routing">
+        <div className="diag-head">
+          <h2>Routing (VPN mode)</h2>
+          <div className="diag-actions">
+            <button className="ghost" onClick={runPreflight}>
+              Pre-flight
+            </button>
+            <button className="ghost" onClick={runRoutingDiagnostics}>
+              Diagnostics
+            </button>
+            <button className="ghost" onClick={runRoutingRecover}>
+              Recover adapters
+            </button>
+            <button className="ghost" onClick={runRoutingCleanup}>
+              Cleanup
+            </button>
+          </div>
+        </div>
+        {preflightInfo && (
+          <div className="routing-status">
+            <span className={`badge ${preflightInfo.canStart ? "ok" : "warn"}`}>
+              {preflightInfo.canStart ? "ready" : "blocked"}
+            </span>
+            <span className="muted">
+              elevation={preflightInfo.elevated ? "yes" : "no"} · wintun=
+              {preflightInfo.wintunAvailable ? "yes" : "no"} · stale adapters=
+              {preflightInfo.staleAdapters.length}
+            </span>
+          </div>
+        )}
+        {routingInfo && (
+          <dl className="routing-details">
+            <dt>TUN adapters</dt>
+            <dd>{routingInfo.activeTunAdapters.join(", ") || "none"}</dd>
+            <dt>Default route</dt>
+            <dd>{routingInfo.defaultRoutes.join(", ") || "none"}</dd>
+            <dt>DNS servers</dt>
+            <dd>{routingInfo.dnsServers.join(", ") || "none"}</dd>
+            <dt>wintun.dll</dt>
+            <dd>{routingInfo.wintunPath ?? "not found"}</dd>
+          </dl>
+        )}
+        {!preflightInfo && !routingInfo && (
+          <p className="muted">
+            VPN mode requires elevation and wintun.dll. Use the buttons above to inspect the
+            routing state.
+          </p>
+        )}
+      </section>
 
       <section className="card diagnostics">
         <div className="diag-head">

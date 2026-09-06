@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, Manager};
 
 use crate::core::config::{build_config, ConnectParams};
+use crate::core::routing;
 use crate::core::session::CoreSession;
 use crate::core::singbox;
 use crate::state::AppState;
@@ -152,6 +153,17 @@ pub fn connect(app: AppHandle, req: ConnectRequest) -> Result<(), String> {
         return Err("VPN mode requires administrator privileges — click Connect again to elevate".to_string());
     }
 
+    // Routing pre-flight + stale adapter recovery for VPN (TUN) mode.
+    if req.mode == "vpn" {
+        match routing::prepare_for_tun(&app) {
+            Ok(report) if !report.can_start => {
+                return Err(report.messages.join(" "));
+            }
+            Ok(_) => {}
+            Err(e) => return Err(e),
+        }
+    }
+
     {
         let state = app.state::<AppState>();
         let guard = state.session.lock().unwrap();
@@ -192,6 +204,7 @@ pub fn connect(app: AppHandle, req: ConnectRequest) -> Result<(), String> {
 
     let session = CoreSession::spawn(app.clone(), &exe, &config_path, &dir)?;
     *app.state::<AppState>().session.lock().unwrap() = Some(session);
+    *app.state::<AppState>().session_mode.lock().unwrap() = params.mode.clone();
 
     let _ = app.emit("core-status", "connected");
     Ok(())
@@ -209,6 +222,14 @@ pub fn disconnect(app: AppHandle) -> Result<(), String> {
     if let Some(session) = session {
         session.kill()?;
     }
+
+    // Post-session routing cleanup for VPN (TUN) mode.
+    let mode = app.state::<AppState>().session_mode.lock().unwrap().clone();
+    *app.state::<AppState>().session_mode.lock().unwrap() = String::new();
+    if mode == "vpn" {
+        let _ = routing::teardown_after_tun(&app);
+    }
+
     let _ = app.emit("core-status", "disconnected");
     Ok(())
 }
@@ -310,4 +331,28 @@ pub fn recover_network(app: AppHandle) -> Result<String, String> {
     {
         Ok("session stopped".to_string())
     }
+}
+
+/// Pre-flight check before starting a TUN session: elevation, wintun, stale adapters.
+#[tauri::command]
+pub fn routing_preflight(app: AppHandle) -> Result<crate::core::routing::PreflightReport, String> {
+    crate::core::routing::prepare_for_tun(&app)
+}
+
+/// Full routing snapshot for diagnostics (adapters, routes, DNS).
+#[tauri::command]
+pub fn routing_diagnostics(app: AppHandle) -> crate::core::routing::RoutingDiagnostics {
+    crate::core::routing::diagnostics(&app)
+}
+
+/// Detect and report orphaned TUN adapters from crashed sessions.
+#[tauri::command]
+pub fn routing_recover(app: AppHandle) -> Result<Vec<String>, String> {
+    crate::core::routing::recover_stale_adapters(&app)
+}
+
+/// Flush DNS cache and verify the default route is restored.
+#[tauri::command]
+pub fn routing_cleanup(app: AppHandle) -> Result<std::collections::HashMap<String, String>, String> {
+    crate::core::routing::cleanup(&app)
 }

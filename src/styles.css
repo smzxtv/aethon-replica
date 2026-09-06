@@ -493,4 +493,58 @@ button.danger-text {
 .about dd {
   margin: 0;
   word-break: break-all;
+.about dd {
+  margin: 0;
+  word-break: break-all;
+}
+
+/* ------------------------------------------------------------------------- */
+/* Routing (VPN mode) diagnostics                                           */
+/* ------------------------------------------------------------------------- */
+
+.routing .routing-status {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.routing .badge {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 10px;
+  border-radius: 999px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.routing .badge.ok {
+  background: rgba(52, 211, 153, 0.15);
+  color: #6ee7b7;
+}
+
+.routing .badge.warn {
+  background: rgba(251, 191, 36, 0.15);
+  color: #fbbf24;
+}
+
+.routing-details {
+  display: grid;
+  grid-template-columns: 130px 1fr;
+  gap: 6px 14px;
+  margin: 0;
+  font-size: 12.5px;
+}
+
+.routing-details dt {
+  color: var(--muted);
+}
+
+.routing-details dd {
+  margin: 0;
+  word-break: break-all;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 12px;
+}
+
 }

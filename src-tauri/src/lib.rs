@@ -21,7 +21,11 @@ pub fn run() {
             commands::save_app_state,
             commands::ensure_vpn_elevation,
             commands::test_endpoint,
-            commands::recover_network
+            commands::recover_network,
+            commands::routing_preflight,
+            commands::routing_diagnostics,
+            commands::routing_recover,
+            commands::routing_cleanup
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
