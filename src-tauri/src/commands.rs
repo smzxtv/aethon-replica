@@ -356,3 +356,39 @@ pub fn routing_recover(app: AppHandle) -> Result<Vec<String>, String> {
 pub fn routing_cleanup(app: AppHandle) -> Result<std::collections::HashMap<String, String>, String> {
     crate::core::routing::cleanup(&app)
 }
+
+// ---------------------------------------------------------------------------
+// Update checker (GitHub Releases)
+// ---------------------------------------------------------------------------
+
+/// Check GitHub Releases for a newer version. Returns `None` when the repo
+/// isn't configured or the current version is already up to date.
+#[tauri::command]
+pub fn check_for_updates(app: AppHandle) -> Result<Option<crate::core::updater::UpdateInfo>, String> {
+    let current = app.package_info().version.to_string();
+    crate::core::updater::check(&current)
+        .map(|info| {
+            if info.update_available {
+                let _ = app.emit("update-available", &info);
+                Some(info)
+            } else {
+                None
+            }
+        })
+}
+
+/// Download a specific asset from the latest release. Progress streams over
+/// the `update-progress` event; completion over `update-downloaded`.
+#[tauri::command]
+pub fn download_update(app: AppHandle, asset_name: String) -> Result<crate::core::updater::DownloadResult, String> {
+    let result = crate::core::updater::download_and_install(&app, &asset_name)?;
+    let _ = app.emit("update-downloaded", &result);
+    Ok(result)
+}
+
+/// Compare two version strings (semver-ish). Exposed for the frontend to decide
+/// whether to prompt the user before downloading.
+#[tauri::command]
+pub fn version_compare(latest: String, current: String) -> bool {
+    crate::core::updater::version_gt(&latest, &current)
+}

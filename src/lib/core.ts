@@ -122,3 +122,51 @@ export function routingRecover(): Promise<string[]> {
 export function routingCleanup(): Promise<Record<string, string>> {
   return invoke<Record<string, string>>("routing_cleanup");
 }
+
+// ---------------------------------------------------------------------------
+// Update checker (GitHub Releases)
+// ---------------------------------------------------------------------------
+
+export interface UpdateAsset {
+  name: string;
+  url: string;
+  sha256: string | null;
+  size: number;
+}
+
+export interface UpdateInfo {
+  updateRepo: string;
+  latestVersion: string;
+  publishedAt: string | null;
+  releaseNotes: string;
+  updateAvailable: boolean;
+  assets: UpdateAsset[];
+}
+
+export interface DownloadResult {
+  asset: string;
+  savedPath: string;
+  verified: boolean;
+  launched: boolean;
+}
+
+export interface UpdateProgress {
+  asset: string;
+  received: number;
+  total: number;
+}
+
+/** Check GitHub Releases for a newer version. */
+export function checkForUpdates(): Promise<UpdateInfo | null> {
+  return invoke<UpdateInfo | null>("check_for_updates");
+}
+
+/** Download a specific asset from the latest release. */
+export function downloadUpdate(assetName: string): Promise<DownloadResult> {
+  return invoke<DownloadResult>("download_update", { assetName });
+}
+
+/** Compare two version strings (semver-ish). */
+export function versionCompare(latest: string, current: string): Promise<boolean> {
+  return invoke<boolean>("version_compare", { latest, current });
+}

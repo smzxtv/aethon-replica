@@ -547,4 +547,63 @@ button.danger-text {
   font-size: 12px;
 }
 
+/* ------------------------------------------------------------------------- */
+/* Update UI                                                                 */
+/* ------------------------------------------------------------------------- */
+
+.update-progress {
+  margin-top: 12px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.progress-bar {
+  flex: 1;
+  height: 8px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #60a5fa, #a78bfa);
+  border-radius: 999px;
+  transition: width 0.2s ease;
+}
+
+.update-available {
+  margin-top: 14px;
+  padding: 14px;
+  background: rgba(96, 165, 250, 0.08);
+  border: 1px solid rgba(96, 165, 250, 0.3);
+  border-radius: 8px;
+}
+
+.update-available h3 {
+  margin: 0 0 8px;
+  font-size: 14px;
+}
+
+.release-notes {
+  margin: 0;
+  padding: 10px;
+  background: rgba(0, 0, 0, 0.25);
+  border-radius: 6px;
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.notice.error {
+  background: rgba(239, 68, 68, 0.12);
+  border-color: rgba(239, 68, 68, 0.45);
+  color: #fca5a5;
+}
+
+
 }

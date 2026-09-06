@@ -230,14 +230,6 @@ pub fn recover_stale_adapters(app: &AppHandle) -> Result<Vec<String>, String> {
     Ok(stale)
 }
 
-/// Ensure the bundled wintun.dll is registered next to the core so sing-box
-/// can load it. Returns the path it resolved to.
-pub fn ensure_wintun(app: &AppHandle) -> Result<PathBuf, String> {
-    wintun_dll_path(app).ok_or_else(|| {
-        "wintun.dll not found — place it next to sing-box.exe in resources/sing-box/".into()
-    })
-}
-
 /// Called before spawning a TUN session: pre-flight + recovery.
 pub fn prepare_for_tun(app: &AppHandle) -> Result<PreflightReport, String> {
     let _ = recover_stale_adapters(app);
