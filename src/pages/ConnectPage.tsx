@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+﻿import { useEffect, useState } from "react";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { useApp } from "../store";
 import {
@@ -17,7 +17,7 @@ import StatusBadge from "../components/StatusBadge";
 import type { ConnectionMode, ConnectionState, Protocol, ScanMode } from "../types";
 
 const PROTOCOLS: { value: Protocol; label: string }[] = [
-  { value: "auto", label: "Auto" },
+  { value: "auto", label: "自动" },
   { value: "shadowsocks", label: "Shadowsocks" },
   { value: "vmess", label: "VMess" },
   { value: "vless", label: "VLESS" },
@@ -27,11 +27,10 @@ const PROTOCOLS: { value: Protocol; label: string }[] = [
 ];
 
 const SCAN_MODES: { value: ScanMode; label: string }[] = [
-  { value: "disabled", label: "Off" },
-  { value: "quick", label: "Quick" },
-  { value: "full", label: "Full" },
+  { value: "disabled", label: "关闭" },
+  { value: "quick", label: "快速" },
+  { value: "full", label: "完整" },
 ];
-
 export default function ConnectPage() {
   const { state, dispatch } = useApp();
   const { conn, status, profiles, logs, settings } = state;
@@ -56,178 +55,146 @@ export default function ConnectPage() {
       for (const fn of unlisteners) fn();
     };
   }, [dispatch]);
-
   async function handleConnect() {
     if (status === "connected") {
       try {
         await disconnectClient();
-        dispatch({ type: "push-log", line: "[core] session torn down by user" });
+        dispatch({ type: "push-log", line: "[核心] 会话已关闭" });
       } catch (err) {
-        dispatch({ type: "push-log", line: `[core] ${String(err)}` });
+        dispatch({ type: "set-status", status: "error" });
+        dispatch({ type: "push-log", line: `[核心] ${String(err)}` });
       }
       return;
     }
     if (!selectedProfile) {
-      dispatch({ type: "set-status", status: "error" });
-      dispatch({ type: "push-log", line: "[app] create a server profile first" });
+      dispatch({ type: "push-log", line: "[核心] 请先选择一个服务器配置" });
       return;
     }
     if (conn.mode === "vpn") {
       try {
-        const elev = await ensureVpnElevation();
-        if (elev !== "elevated") {
+        const result = await ensureVpnElevation();
+        if (result === "relaunching") {
           setElevating(true);
-          dispatch({
-            type: "push-log",
-            line: "[app] administrator privileges requested — please confirm the UAC prompt",
-          });
           return;
         }
       } catch (err) {
-        dispatch({ type: "set-status", status: "error" });
-        dispatch({ type: "push-log", line: `[app] elevation failed: ${String(err)}` });
+        dispatch({ type: "push-log", line: `[权限] ${String(err)}` });
         return;
       }
     }
-    const protocol = conn.protocol === "auto" ? selectedProfile.protocol : conn.protocol;
     dispatch({ type: "set-status", status: "connecting" });
-    dispatch({
-      type: "push-log",
-      line: `[core] starting session (mode=${conn.mode}, protocol=${protocol})…`,
-    });
     try {
       await connectClient({
         mode: conn.mode,
-        protocol,
+        protocol: selectedProfile.protocol,
         address: selectedProfile.address,
         port: selectedProfile.port,
         params: selectedProfile.params,
         socksPort: settings.socksPort,
         logLevel: settings.logLevel,
       });
-      // The authoritative status arrives over core-status / core-exited events.
     } catch (err) {
       dispatch({ type: "set-status", status: "error" });
-      dispatch({ type: "push-log", line: `[core] ${String(err)}` });
+      dispatch({ type: "push-log", line: `[核心] ${String(err)}` });
     }
   }
-
   async function testConnection() {
     if (!selectedProfile) return;
-    dispatch({ type: "push-log", line: `[diag] testing ${selectedProfile.address}:${selectedProfile.port}…` });
+    dispatch({ type: "push-log", line: `[诊断] 正在测试 ${selectedProfile.address}:${selectedProfile.port}…` });
     try {
       const result = await testEndpoint(selectedProfile.address, selectedProfile.port);
-      dispatch({ type: "push-log", line: `[diag] ${result}` });
+      dispatch({ type: "push-log", line: `[诊断] ${result}` });
     } catch (err) {
-      dispatch({ type: "push-log", line: `[diag] ${String(err)}` });
+      dispatch({ type: "push-log", line: `[诊断] ${String(err)}` });
     }
   }
 
   async function recover() {
-    dispatch({ type: "push-log", line: "[diag] recovering network…" });
+    dispatch({ type: "push-log", line: "[诊断] 正在恢复网络…" });
     try {
       const result = await recoverNetwork();
-      dispatch({ type: "push-log", line: `[diag] ${result}` });
+      dispatch({ type: "push-log", line: `[诊断] ${result}` });
     } catch (err) {
-      dispatch({ type: "push-log", line: `[diag] ${String(err)}` });
+      dispatch({ type: "push-log", line: `[诊断] ${String(err)}` });
     }
   }
-
-  // ---------------------------------------------------------------------------
-  // Routing diagnostics (VPN/TUN mode)
-  // ---------------------------------------------------------------------------
   const [routingInfo, setRoutingInfo] = useState<RoutingDiagnostics | null>(null);
   const [preflightInfo, setPreflightInfo] = useState<PreflightReport | null>(null);
 
   async function runPreflight() {
-    dispatch({ type: "push-log", line: "[routing] running pre-flight…" });
+    dispatch({ type: "push-log", line: "[路由] 正在运行预检…" });
     try {
       const report = await routingPreflight();
       setPreflightInfo(report);
-      dispatch({
-        type: "push-log",
-        line: `[routing] pre-flight: ${report.messages.join(" ")}`,
-      });
+      dispatch({ type: "push-log", line: `[路由] 预检: ${report.messages.join(" ")}` });
     } catch (err) {
-      dispatch({ type: "push-log", line: `[routing] ${String(err)}` });
+      dispatch({ type: "push-log", line: `[路由] ${String(err)}` });
     }
   }
 
   async function runRoutingDiagnostics() {
-    dispatch({ type: "push-log", line: "[routing] gathering diagnostics…" });
+    dispatch({ type: "push-log", line: "[路由] 正在收集诊断信息…" });
     try {
       const info = await routingDiagnostics();
       setRoutingInfo(info);
-      dispatch({
-        type: "push-log",
-        line: `[routing] adapters=${info.activeTunAdapters.length} routes=${info.defaultRoutes.length} dns=${info.dnsServers.length}`,
-      });
+      dispatch({ type: "push-log", line: `[路由] 适配器=${info.activeTunAdapters.length} 路由=${info.defaultRoutes.length} DNS=${info.dnsServers.length}` });
     } catch (err) {
-      dispatch({ type: "push-log", line: `[routing] ${String(err)}` });
+      dispatch({ type: "push-log", line: `[路由] ${String(err)}` });
     }
   }
-
   async function runRoutingRecover() {
-    dispatch({ type: "push-log", line: "[routing] scanning for stale adapters…" });
+    dispatch({ type: "push-log", line: "[路由] 正在扫描残留适配器…" });
     try {
       const stale = await routingRecover();
-      dispatch({
-        type: "push-log",
-        line: `[routing] ${stale.length === 0 ? "no orphaned adapters" : `found: ${stale.join(", ")}`}`,
-      });
+      dispatch({ type: "push-log", line: `[路由] ${stale.length === 0 ? "无残留适配器" : `发现: ${stale.join(", ")}`}` });
     } catch (err) {
-      dispatch({ type: "push-log", line: `[routing] ${String(err)}` });
+      dispatch({ type: "push-log", line: `[路由] ${String(err)}` });
     }
   }
 
   async function runRoutingCleanup() {
-    dispatch({ type: "push-log", line: "[routing] cleaning up routes/DNS…" });
+    dispatch({ type: "push-log", line: "[路由] 正在清理路由/DNS…" });
     try {
       const report = await routingCleanup();
-      dispatch({
-        type: "push-log",
-        line: `[routing] dns=${report.dns ?? "?"} route=${report.route ?? "?"} stale=${report.stale_adapters ?? "?"}`,
-      });
+      dispatch({ type: "push-log", line: `[路由] DNS=${report.dns ?? "?"} 路由=${report.route ?? "?"} 残留=${report.stale_adapters ?? "?"}` });
     } catch (err) {
-      dispatch({ type: "push-log", line: `[routing] ${String(err)}` });
+      dispatch({ type: "push-log", line: `[路由] ${String(err)}` });
     }
   }
-
   return (
     <div className="page">
       <header className="page-head">
         <div>
-          <h1>Connect</h1>
-          <p className="muted">System-wide VPN routing or a local SOCKS5 proxy.</p>
+          <h1>连接</h1>
+          <p className="muted">系统级 VPN 路由或本地 SOCKS5 代理。</p>
         </div>
         <StatusBadge status={status} />
       </header>
 
       <section className="card">
-        <h2>Mode</h2>
+        <h2>模式</h2>
         <div className="mode-grid">
           <button
             className={`mode-card ${conn.mode === "vpn" ? "selected" : ""}`}
             onClick={() => dispatch({ type: "set-mode", mode: "vpn" as ConnectionMode })}
           >
-            <strong>VPN Mode</strong>
-            <span>System-wide route via TUN adapter</span>
+            <strong>VPN 模式</strong>
+            <span>通过 TUN 适配器进行系统级路由</span>
           </button>
           <button
             className={`mode-card ${conn.mode === "socks5" ? "selected" : ""}`}
             onClick={() => dispatch({ type: "set-mode", mode: "socks5" as ConnectionMode })}
           >
-            <strong>Manual SOCKS5</strong>
-            <span>Proxy only · 127.0.0.1:{state.settings.socksPort}</span>
+            <strong>手动 SOCKS5</strong>
+            <span>仅代理 · 127.0.0.1:{state.settings.socksPort}</span>
           </button>
         </div>
       </section>
-
       <section className="card">
-        <h2>Profile</h2>
+        <h2>配置</h2>
         <div className="form-row">
           <label className="field">
-            <span>Server profile</span>
+            <span>服务器配置</span>
             <select
               value={conn.profileId ?? ""}
               onChange={(e) =>
@@ -239,12 +206,12 @@ export default function ConnectPage() {
                   {p.name} — {p.address}:{p.port}
                 </option>
               ))}
-              {!profiles.length && <option value="">no profiles yet</option>}
+              {!profiles.length && <option value="">暂无配置</option>}
             </select>
           </label>
 
           <label className="field">
-            <span>Protocol</span>
+            <span>协议</span>
             <select
               value={conn.protocol}
               onChange={(e) =>
@@ -260,7 +227,7 @@ export default function ConnectPage() {
           </label>
 
           <label className="field">
-            <span>Scan mode</span>
+            <span>扫描模式</span>
             <select
               value={conn.scanMode}
               onChange={(e) =>
@@ -287,8 +254,7 @@ export default function ConnectPage() {
 
       {elevating && (
         <div className="notice">
-          Administrator privileges were requested — please confirm the UAC prompt. The app will
-          restart elevated, then press Connect again.
+          已请求管理员权限 — 请确认 UAC 提示。应用将重启并提升权限，然后请再次按连接。
         </div>
       )}
 
@@ -297,72 +263,61 @@ export default function ConnectPage() {
           className={`connect-btn ${status === "connected" ? "danger" : ""}`}
           onClick={handleConnect}
         >
-          {status === "connected" ? "Disconnect" : "Connect"}
+          {status === "connected" ? "断开" : "连接"}
         </button>
       </div>
-
       <section className="card routing">
         <div className="diag-head">
-          <h2>Routing (VPN mode)</h2>
+          <h2>路由（VPN 模式）</h2>
           <div className="diag-actions">
-            <button className="ghost" onClick={runPreflight}>
-              Pre-flight
-            </button>
-            <button className="ghost" onClick={runRoutingDiagnostics}>
-              Diagnostics
-            </button>
-            <button className="ghost" onClick={runRoutingRecover}>
-              Recover adapters
-            </button>
-            <button className="ghost" onClick={runRoutingCleanup}>
-              Cleanup
-            </button>
+            <button className="ghost" onClick={runPreflight}>预检</button>
+            <button className="ghost" onClick={runRoutingDiagnostics}>诊断</button>
+            <button className="ghost" onClick={runRoutingRecover}>恢复适配器</button>
+            <button className="ghost" onClick={runRoutingCleanup}>清理</button>
           </div>
         </div>
         {preflightInfo && (
           <div className="routing-status">
             <span className={`badge ${preflightInfo.canStart ? "ok" : "warn"}`}>
-              {preflightInfo.canStart ? "ready" : "blocked"}
+              {preflightInfo.canStart ? "就绪" : "已阻止"}
             </span>
             <span className="muted">
-              elevation={preflightInfo.elevated ? "yes" : "no"} · wintun=
-              {preflightInfo.wintunAvailable ? "yes" : "no"} · stale adapters=
+              权限={preflightInfo.elevated ? "是" : "否"} · wintun=
+              {preflightInfo.wintunAvailable ? "是" : "否"} · 残留适配器=
               {preflightInfo.staleAdapters.length}
             </span>
           </div>
         )}
         {routingInfo && (
           <dl className="routing-details">
-            <dt>TUN adapters</dt>
-            <dd>{routingInfo.activeTunAdapters.join(", ") || "none"}</dd>
-            <dt>Default route</dt>
-            <dd>{routingInfo.defaultRoutes.join(", ") || "none"}</dd>
-            <dt>DNS servers</dt>
-            <dd>{routingInfo.dnsServers.join(", ") || "none"}</dd>
+            <dt>TUN 适配器</dt>
+            <dd>{routingInfo.activeTunAdapters.join(", ") || "无"}</dd>
+            <dt>默认路由</dt>
+            <dd>{routingInfo.defaultRoutes.join(", ") || "无"}</dd>
+            <dt>DNS 服务器</dt>
+            <dd>{routingInfo.dnsServers.join(", ") || "无"}</dd>
             <dt>wintun.dll</dt>
-            <dd>{routingInfo.wintunPath ?? "not found"}</dd>
+            <dd>{routingInfo.wintunPath ?? "未找到"}</dd>
           </dl>
         )}
         {!preflightInfo && !routingInfo && (
           <p className="muted">
-            VPN mode requires elevation and wintun.dll. Use the buttons above to inspect the
-            routing state.
+            VPN 模式需要管理员权限和 wintun.dll。使用上方按钮查看路由状态。
           </p>
         )}
       </section>
-
       <section className="card diagnostics">
         <div className="diag-head">
-          <h2>Diagnostics</h2>
+          <h2>诊断</h2>
           <div className="diag-actions">
             <button className="ghost" onClick={testConnection} disabled={!selectedProfile}>
-              Test connection
+              测试连接
             </button>
             <button className="ghost" onClick={recover}>
-              Recover network
+              恢复网络
             </button>
             <button className="ghost" onClick={() => dispatch({ type: "clear-logs" })}>
-              Clear
+              清空
             </button>
           </div>
         </div>

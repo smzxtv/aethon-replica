@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "aethon-replica",
+  "productName": "Aethon Replica",
   "version": "0.1.0",
   "identifier": "io.github.aethonreplica.desktop",
   "build": {
@@ -40,3 +40,5 @@
     ]
   }
 }
+
+

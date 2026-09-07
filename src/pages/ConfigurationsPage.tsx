@@ -1,167 +1,143 @@
-import { useState } from "react";
+﻿import { useState } from "react";
 import { useApp } from "../store";
-import type { Protocol, ServerProfile } from "../types";
+import type { Protocol } from "../types";
 
-const PROTOCOLS: Protocol[] = [
-  "auto",
-  "shadowsocks",
-  "vmess",
-  "vless",
-  "trojan",
-  "hysteria2",
-  "tuic",
+const PROTOCOLS: { value: Protocol; label: string }[] = [
+  { value: "auto", label: "自动" },
+  { value: "shadowsocks", label: "Shadowsocks" },
+  { value: "vmess", label: "VMess" },
+  { value: "vless", label: "VLESS" },
+  { value: "trojan", label: "Trojan" },
+  { value: "hysteria2", label: "Hysteria2" },
+  { value: "tuic", label: "TUIC" },
 ];
-
-function blankProfile(): ServerProfile {
-  return {
-    id: crypto.randomUUID(),
-    name: "",
-    protocol: "shadowsocks",
-    address: "",
-    port: 443,
-    params: {},
-  };
-}
 
 export default function ConfigurationsPage() {
   const { state, dispatch } = useApp();
-  const [editing, setEditing] = useState<ServerProfile | null>(null);
-  const [paramsText, setParamsText] = useState("{}");
+  const { profiles, conn } = state;
+  const [showForm, setShowForm] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [name, setName] = useState("");
+  const [protocol, setProtocol] = useState<Protocol>("shadowsocks");
+  const [address, setAddress] = useState("");
+  const [port, setPort] = useState(443);
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  function resetForm() {
+    setName("");
+    setProtocol("shadowsocks");
+    setAddress("");
+    setPort(443);
+    setUsername("");
+    setPassword("");
+    setEditingId(null);
+    setShowForm(false);
+  }
 
-  function startEdit(p?: ServerProfile) {
-    if (p) {
-      setEditing({ ...p });
-      setParamsText(JSON.stringify(p.params, null, 2));
+  function startEdit(id: string) {
+    const p = profiles.find((x) => x.id === id);
+    if (!p) return;
+    setName(p.name);
+    setProtocol(p.protocol);
+    setAddress(p.address);
+    setPort(p.port);
+    setUsername(p.params.username ?? "");
+    setPassword(p.params.password ?? "");
+    setEditingId(id);
+    setShowForm(true);
+  }
+
+  function saveProfile() {
+    if (!name.trim() || !address.trim() || port <= 0) return;
+    const params: Record<string, string> = {};
+    if (username.trim()) params.username = username.trim();
+    if (password.trim()) params.password = password.trim();
+    const profile = { id: editingId ?? `profile-${Date.now()}`, name: name.trim(), protocol, address: address.trim(), port, params };
+    if (editingId) {
+      dispatch({ type: "update-profile", profile });
     } else {
-      setEditing(blankProfile());
-      setParamsText("{}");
+      dispatch({ type: "add-profile", profile });
     }
+    resetForm();
   }
-
-  function save() {
-    if (!editing) return;
-    let params: Record<string, string> = {};
-    try {
-      params = paramsText.trim() ? JSON.parse(paramsText) : {};
-    } catch {
-      window.alert("Params must be valid JSON.");
-      return;
-    }
-    const profile = { ...editing, params };
-    const exists = state.profiles.some((p) => p.id === profile.id);
-    if (exists) dispatch({ type: "update-profile", profile });
-    else dispatch({ type: "add-profile", profile });
-    setEditing(null);
-  }
-
   return (
     <div className="page">
       <header className="page-head">
         <div>
-          <h1>Configurations</h1>
-          <p className="muted">Server profiles used by Connect.</p>
+          <h1>配置</h1>
+          <p className="muted">管理服务器配置文件和协议设置。</p>
         </div>
-        <button className="primary" onClick={() => startEdit()}>
-          New configuration
-        </button>
       </header>
 
       <section className="card">
-        {state.profiles.length === 0 && <p className="muted">No profiles yet — create one.</p>}
-        <ul className="profile-list">
-          {state.profiles.map((p) => (
-            <li key={p.id} className="profile-row">
-              <div>
-                <strong>{p.name || p.address}</strong>
-                <span className="muted">
-                  {p.protocol} · {p.address}:{p.port}
-                </span>
-              </div>
-              <div className="row-actions">
-                <button className="ghost" onClick={() => startEdit(p)}>
-                  Edit
-                </button>
-                <button
-                  className="ghost danger-text"
-                  onClick={() => dispatch({ type: "remove-profile", id: p.id })}
-                >
-                  Delete
-                </button>
-              </div>
-            </li>
-          ))}
-        </ul>
-      </section>
+        <div className="diag-head">
+          <h2>服务器配置</h2>
+          <button className="primary" onClick={() => setShowForm(!showForm)}>
+            {showForm ? "取消" : "添加配置"}
+          </button>
+        </div>
 
-      {editing && (
-        <div className="overlay" onClick={() => setEditing(null)}>
-          <div className="modal" onClick={(e) => e.stopPropagation()}>
-            <h2>
-              {state.profiles.some((p) => p.id === editing.id)
-                ? "Edit configuration"
-                : "New configuration"}
-            </h2>
-            <div className="form-grid">
+        {showForm && (
+          <div className="profile-form">
+            <div className="form-row">
               <label className="field">
-                <span>Name</span>
-                <input
-                  value={editing.name}
-                  onChange={(e) => setEditing({ ...editing, name: e.target.value })}
-                />
+                <span>名称</span>
+                <input value={name} onChange={(e) => setName(e.target.value)} placeholder="我的服务器" />
               </label>
               <label className="field">
-                <span>Protocol</span>
-                <select
-                  value={editing.protocol}
-                  onChange={(e) =>
-                    setEditing({ ...editing, protocol: e.target.value as Protocol })
-                  }
-                >
-                  {PROTOCOLS.map((pr) => (
-                    <option key={pr} value={pr}>
-                      {pr}
-                    </option>
+                <span>协议</span>
+                <select value={protocol} onChange={(e) => setProtocol(e.target.value as Protocol)}>
+                  {PROTOCOLS.map((p) => (
+                    <option key={p.value} value={p.value}>{p.label}</option>
                   ))}
                 </select>
               </label>
+            </div>
+            <div className="form-row">
               <label className="field">
-                <span>Address</span>
-                <input
-                  value={editing.address}
-                  onChange={(e) => setEditing({ ...editing, address: e.target.value })}
-                />
+                <span>地址</span>
+                <input value={address} onChange={(e) => setAddress(e.target.value)} placeholder="example.com" />
               </label>
               <label className="field">
-                <span>Port</span>
-                <input
-                  type="number"
-                  min={1}
-                  max={65535}
-                  value={editing.port}
-                  onChange={(e) => setEditing({ ...editing, port: Number(e.target.value) })}
-                />
+                <span>端口</span>
+                <input type="number" min={1} max={65535} value={port} onChange={(e) => setPort(Number(e.target.value))} />
               </label>
             </div>
-            <label className="field">
-              <span>Params (JSON)</span>
-              <textarea
-                rows={5}
-                value={paramsText}
-                onChange={(e) => setParamsText(e.target.value)}
-                spellCheck={false}
-              />
-            </label>
-            <div className="modal-actions">
-              <button className="ghost" onClick={() => setEditing(null)}>
-                Cancel
+            <div className="form-row">
+              <label className="field">
+                <span>用户名（可选）</span>
+                <input value={username} onChange={(e) => setUsername(e.target.value)} />
+              </label>
+              <label className="field">
+                <span>密码（可选）</span>
+                <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
+              </label>
+            </div>
+            <div className="form-row">
+              <button className="primary" onClick={saveProfile}>
+                {editingId ? "保存修改" : "添加"}
               </button>
-              <button className="primary" onClick={save}>
-                Save
-              </button>
+              <button className="ghost" onClick={resetForm}>取消</button>
             </div>
           </div>
-        </div>
-      )}
+        )}
+        <ul className="profile-list">
+          {profiles.map((p) => (
+            <li key={p.id} className={p.id === conn.profileId ? "selected" : ""}>
+              <button className="profile-item" onClick={() => dispatch({ type: "select-profile", id: p.id })}>
+                <strong>{p.name}</strong>
+                <span className="muted">{p.protocol} · {p.address}:{p.port}</span>
+              </button>
+              <div className="profile-actions">
+                <button className="ghost small" onClick={() => startEdit(p.id)}>编辑</button>
+                <button className="ghost small danger" onClick={() => dispatch({ type: "remove-profile", id: p.id })}>删除</button>
+              </div>
+            </li>
+          ))}
+          {!profiles.length && <li className="muted empty">暂无配置，点击"添加配置"开始。</li>}
+        </ul>
+      </section>
     </div>
   );
 }
+

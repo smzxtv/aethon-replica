@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+﻿import { useEffect, useState } from "react";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { useApp } from "../store";
 import type { LogLevel } from "../types";
@@ -19,10 +19,8 @@ export default function SettingsPage() {
   const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
   const [updateError, setUpdateError] = useState<string | null>(null);
   const [progress, setProgress] = useState<UpdateProgress | null>(null);
-  const [lastCheck, setLastCheck] = useState<string>("never");
+  const [lastCheck, setLastCheck] = useState<string>("从未");
   const [downloadResult, setDownloadResult] = useState<DownloadResult | null>(null);
-
-  // Listen for update events from the backend.
   useEffect(() => {
     const unlisteners: UnlistenFn[] = [];
     listen<UpdateProgress>("update-progress", (e) => {
@@ -33,24 +31,19 @@ export default function SettingsPage() {
       setUpdateStatus("done");
       setProgress(null);
     }).then((fn) => unlisteners.push(fn));
-    listen<UpdateInfo>("update-available", (e) => {
-      setUpdateInfo(e.payload);
-      setUpdateStatus("available");
-    }).then((fn) => unlisteners.push(fn));
     return () => {
       for (const fn of unlisteners) fn();
     };
   }, []);
 
-  // Auto-update check on launch + every N hours while running.
   useEffect(() => {
     if (!settings.autoUpdate) return;
     let cancelled = false;
     const doCheck = () => {
       if (cancelled) return;
       checkForUpdates()
-        .then(() => setLastCheck(new Date().toLocaleString()))
-        .catch(() => setLastCheck(`failed at ${new Date().toLocaleString()}`));
+        .then(() => setLastCheck(new Date().toLocaleString("zh-CN")))
+        .catch(() => setLastCheck(`检查失败 ${new Date().toLocaleString("zh-CN")}`));
     };
     doCheck();
     const ms = settings.autoUpdateHours * 60 * 60 * 1000;
@@ -60,7 +53,6 @@ export default function SettingsPage() {
       clearInterval(interval);
     };
   }, [settings.autoUpdate, settings.autoUpdateHours]);
-
   async function checkNow() {
     setUpdateStatus("checking");
     setUpdateError(null);
@@ -70,19 +62,16 @@ export default function SettingsPage() {
       if (info) {
         setUpdateInfo(info);
         setUpdateStatus("available");
-        dispatch({
-          type: "push-log",
-          line: `[update] new version available: ${info.latestVersion}`,
-        });
+        dispatch({ type: "push-log", line: `[更新] 发现新版本: ${info.latestVersion}` });
       } else {
         setUpdateStatus("idle");
-        dispatch({ type: "push-log", line: "[update] already up to date" });
+        dispatch({ type: "push-log", line: "[更新] 已是最新版本" });
       }
-      setLastCheck(new Date().toLocaleString());
+      setLastCheck(new Date().toLocaleString("zh-CN"));
     } catch (err) {
       setUpdateStatus("error");
       setUpdateError(String(err));
-      dispatch({ type: "push-log", line: `[update] ${String(err)}` });
+      dispatch({ type: "push-log", line: `[更新] ${String(err)}` });
     }
   }
 
@@ -95,37 +84,32 @@ export default function SettingsPage() {
     if (!asset) return;
     setUpdateStatus("downloading");
     setProgress(null);
-    dispatch({
-      type: "push-log",
-      line: `[update] downloading ${asset.name} (${asset.size} bytes)…`,
-    });
+    dispatch({ type: "push-log", line: `[更新] 正在下载 ${asset.name} (${asset.size} 字节)…` });
     try {
       const result = await downloadUpdate(asset.name);
-      dispatch({
-        type: "push-log",
-        line: `[update] saved to ${result.savedPath} (verified=${result.verified}, launched=${result.launched})`,
-      });
+      dispatch({ type: "push-log", line: `[更新] 已保存到 ${result.savedPath} (校验=${result.verified}, 已启动=${result.launched})` });
     } catch (err) {
       setUpdateStatus("error");
       setUpdateError(String(err));
-      dispatch({ type: "push-log", line: `[update] ${String(err)}` });
+      dispatch({ type: "push-log", line: `[更新] ${String(err)}` });
     }
   }
+  const currentVersion = appInfo?.appVersion ?? "…";
 
   return (
     <div className="page">
       <header className="page-head">
         <div>
-          <h1>Settings</h1>
-          <p className="muted">Routing, proxy and update options.</p>
+          <h1>设置</h1>
+          <p className="muted">路由、代理和更新选项。</p>
         </div>
       </header>
 
       <section className="card">
-        <h2>Local proxy</h2>
+        <h2>本地代理</h2>
         <div className="form-row">
           <label className="field">
-            <span>SOCKS5 listener port</span>
+            <span>SOCKS5 监听端口</span>
             <input
               type="number"
               min={1024}
@@ -137,14 +121,11 @@ export default function SettingsPage() {
             />
           </label>
           <label className="field">
-            <span>Log level</span>
+            <span>日志级别</span>
             <select
               value={settings.logLevel}
               onChange={(e) =>
-                dispatch({
-                  type: "set-settings",
-                  patch: { logLevel: e.target.value as LogLevel },
-                })
+                dispatch({ type: "set-settings", patch: { logLevel: e.target.value as LogLevel } })
               }
             >
               {(["error", "warn", "info", "debug", "trace"] as LogLevel[]).map((l) => (
@@ -156,9 +137,8 @@ export default function SettingsPage() {
           </label>
         </div>
       </section>
-
       <section className="card">
-        <h2>Updates</h2>
+        <h2>更新</h2>
         <div className="form-row">
           <label className="switch-row">
             <input
@@ -168,7 +148,7 @@ export default function SettingsPage() {
                 dispatch({ type: "set-settings", patch: { autoUpdate: e.target.checked } })
               }
             />
-            <span>Check on launch and every {settings.autoUpdateHours} h while running</span>
+            <span>启动时检查，之后每 {settings.autoUpdateHours} 小时检查一次</span>
           </label>
           <label className="switch-row">
             <input
@@ -178,22 +158,21 @@ export default function SettingsPage() {
                 dispatch({ type: "set-settings", patch: { autoDownload: e.target.checked } })
               }
             />
-            <span>Download updates automatically (SHA-256 verified)</span>
+            <span>自动下载更新（SHA-256 校验）</span>
           </label>
         </div>
 
         <div className="form-row" style={{ marginTop: 14 }}>
           <button className="primary" onClick={checkNow} disabled={updateStatus === "checking"}>
-            {updateStatus === "checking" ? "Checking…" : "Check now"}
+            {updateStatus === "checking" ? "检查中…" : "立即检查"}
           </button>
           {updateInfo && updateStatus === "available" && (
             <button className="primary" onClick={startDownload}>
-              Download {updateInfo.latestVersion}
+              下载 {updateInfo.latestVersion}
             </button>
           )}
-          <span className="muted">Last check: {lastCheck}</span>
+          <span className="muted">上次检查: {lastCheck}</span>
         </div>
-
         {updateStatus === "downloading" && progress && (
           <div className="update-progress">
             <div className="progress-bar">
@@ -205,8 +184,7 @@ export default function SettingsPage() {
               />
             </div>
             <span className="muted">
-              {(progress.received / 1024 / 1024).toFixed(1)} /{" "}
-              {(progress.total / 1024 / 1024).toFixed(1)} MB
+              {(progress.received / 1024 / 1024).toFixed(1)} / {(progress.total / 1024 / 1024).toFixed(1)} MB
             </span>
           </div>
         )}
@@ -214,20 +192,19 @@ export default function SettingsPage() {
         {updateStatus === "available" && updateInfo && (
           <div className="update-available">
             <h3>
-              {updateInfo.latestVersion} available
+              {updateInfo.latestVersion} 可用
               {updateInfo.publishedAt && (
-                <span className="muted"> · published {updateInfo.publishedAt}</span>
+                <span className="muted"> · 发布于 {updateInfo.publishedAt}</span>
               )}
             </h3>
             <pre className="release-notes">{updateInfo.releaseNotes}</pre>
           </div>
         )}
-
         {updateStatus === "done" && downloadResult && (
           <div className="notice">
-            Update downloaded to {downloadResult.savedPath}
-            {downloadResult.verified && " · SHA-256 verified"}
-            {downloadResult.launched && " · installer launched"}
+            更新已下载到 {downloadResult.savedPath}
+            {downloadResult.verified && " · SHA-256 校验通过"}
+            {downloadResult.launched && " · 安装程序已启动"}
           </div>
         )}
 
@@ -237,14 +214,14 @@ export default function SettingsPage() {
       </section>
 
       <section className="card">
-        <h2>About</h2>
+        <h2>关于</h2>
         <dl className="about">
-          <dt>App</dt>
-          <dd>{appInfo ? `${appInfo.appName} v${appInfo.appVersion}` : "…"}</dd>
-          <dt>Core</dt>
+          <dt>应用</dt>
+          <dd>{appInfo ? `${appInfo.appName} v${currentVersion}` : "…"}</dd>
+          <dt>核心</dt>
           <dd>{appInfo ? appInfo.core.singBoxVersion : "…"}</dd>
-          <dt>Core path</dt>
-          <dd>{appInfo?.core.corePath ?? "not fetched"}</dd>
+          <dt>核心路径</dt>
+          <dd>{appInfo?.core.corePath ?? "未获取"}</dd>
         </dl>
       </section>
     </div>
