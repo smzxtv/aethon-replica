@@ -21,6 +21,16 @@ export interface PersistedPayload {
   scanMode: ScanMode;
 }
 
+/** 内置默认配置：首次启动无任何配置时自动启用，用户可随时在“配置”页编辑/替换。 */
+export const DEFAULT_PROFILE: ServerProfile = {
+  id: "default-profile",
+  name: "示例服务器（Shadowsocks）",
+  protocol: "shadowsocks",
+  address: "127.0.0.1",
+  port: 8388,
+  params: { method: "aes-128-gcm", password: "change-me" },
+};
+
 export interface AppModel {
   page: Page;
   appInfo: AppInfo | null;
@@ -53,10 +63,10 @@ const initialState: AppModel = {
   page: "connect",
   appInfo: null,
   hydrated: false,
-  profiles: [],
-  conn: { profileId: null, mode: "vpn", protocol: "auto", scanMode: "disabled" },
+  profiles: [DEFAULT_PROFILE],
+  conn: { profileId: DEFAULT_PROFILE.id, mode: "vpn", protocol: "auto", scanMode: "disabled" },
   status: "disconnected",
-  logs: ["[app] Aethon Replica ready"],
+  logs: ["[应用] Aethon Replica 已就绪"],
   settings: {
     socksPort: 1819,
     logLevel: "info",
@@ -73,18 +83,28 @@ function reducer(state: AppModel, action: Action): AppModel {
     case "set-app-info":
       return { ...state, appInfo: action.info };
     case "hydrate":
-      return {
-        ...state,
-        hydrated: true,
-        profiles: action.state.profiles ?? state.profiles,
-        conn: {
-          profileId: action.state.selectedProfileId ?? state.conn.profileId,
-          mode: action.state.mode ?? state.conn.mode,
-          protocol: action.state.protocol ?? state.conn.protocol,
-          scanMode: action.state.scanMode ?? state.conn.scanMode,
-        },
-        settings: { ...state.settings, ...action.state.settings },
-      };
+      // 优先使用已保存的配置；若磁盘上没有任何配置（为空数组），则回退到内置默认配置。
+      {
+        const savedProfiles =
+          action.state.profiles && action.state.profiles.length > 0
+            ? action.state.profiles
+            : state.profiles;
+        const savedId = action.state.selectedProfileId ?? null;
+        const profileId =
+          savedProfiles.find((p) => p.id === savedId)?.id ?? savedProfiles[0]?.id ?? null;
+        return {
+          ...state,
+          hydrated: true,
+          profiles: savedProfiles,
+          conn: {
+            profileId,
+            mode: action.state.mode ?? state.conn.mode,
+            protocol: action.state.protocol ?? state.conn.protocol,
+            scanMode: action.state.scanMode ?? state.conn.scanMode,
+          },
+          settings: { ...state.settings, ...action.state.settings },
+        };
+      }
     case "add-profile":
       return { ...state, profiles: [...state.profiles, action.profile] };
     case "update-profile":

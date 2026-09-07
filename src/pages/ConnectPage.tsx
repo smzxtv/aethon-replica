@@ -66,8 +66,15 @@ export default function ConnectPage() {
       }
       return;
     }
-    if (!selectedProfile) {
-      dispatch({ type: "push-log", line: "[核心] 请先选择一个服务器配置" });
+    // 自动选择：未选中任何配置时，若存在配置则默认选第一个。
+    let profile = selectedProfile;
+    if (!profile && profiles.length > 0) {
+      profile = profiles[0];
+      dispatch({ type: "select-profile", id: profile.id });
+      dispatch({ type: "push-log", line: `[核心] 已自动选择配置：${profile.name}` });
+    }
+    if (!profile) {
+      dispatch({ type: "push-log", line: "[核心] 请先在「配置」页添加一个服务器配置" });
       return;
     }
     if (conn.mode === "vpn") {
@@ -86,10 +93,10 @@ export default function ConnectPage() {
     try {
       await connectClient({
         mode: conn.mode,
-        protocol: selectedProfile.protocol,
-        address: selectedProfile.address,
-        port: selectedProfile.port,
-        params: selectedProfile.params,
+        protocol: profile.protocol,
+        address: profile.address,
+        port: profile.port,
+        params: profile.params,
         socksPort: settings.socksPort,
         logLevel: settings.logLevel,
       });
