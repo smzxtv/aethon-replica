@@ -1,7 +1,7 @@
 [package]
 name = "aethon-replica"
-version = "0.1.0"
-description = "Aethon Replica — independent Tauri v2 client for the sing-box networking core"
+version = "1.0.0"
+description = "Aethon Replica - independent Tauri v2 client for the sing-box networking core"
 authors = ["aethon-replica contributors"]
 edition = "2021"
 
@@ -38,3 +38,4 @@ lto = true
 opt-level = 3
 panic = "abort"
 strip = true
+
