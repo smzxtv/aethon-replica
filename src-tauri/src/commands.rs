@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, Manager};
@@ -206,7 +207,38 @@ pub fn connect(app: AppHandle, req: ConnectRequest) -> Result<(), String> {
     *app.state::<AppState>().session.lock().unwrap() = Some(session);
     *app.state::<AppState>().session_mode.lock().unwrap() = params.mode.clone();
 
+    // Give the core a moment to start. If it exits immediately (e.g. config
+    // error), clear the stuck session and surface the error.
+    std::thread::sleep(Duration::from_millis(800));
+    let alive = {
+        let state = app.state::<AppState>();
+        let guard = state.session.lock().unwrap();
+        guard.as_ref().map(|s| s.is_alive()).unwrap_or(false)
+    };
+    if !alive {
+        let _ = app.state::<AppState>().session.lock().unwrap().take();
+        let _ = app.emit("core-status", "disconnected");
+        return Err("core exited immediately — check the diagnostic logs for the error".to_string());
+    }
+
     let _ = app.emit("core-status", "connected");
+
+    // Auto-configure the Windows system proxy for SOCKS5/mixed sessions so
+    // every browser picks the tunnel up without manual setup.
+    if params.mode == "socks5" {
+        match crate::core::sysproxy::enable(params.socks_port) {
+            Ok(()) => {
+                let _ = app.emit("core-log", format!(
+                    "[proxy] 系统代理已自动开启: 127.0.0.1:{}（断开时自动还原）",
+                    params.socks_port
+                ));
+            }
+            Err(e) => {
+                let _ = app.emit("core-log", format!("[proxy] 系统代理设置失败: {e}"));
+            }
+        }
+    }
+
     Ok(())
 }
 
@@ -228,6 +260,16 @@ pub fn disconnect(app: AppHandle) -> Result<(), String> {
     *app.state::<AppState>().session_mode.lock().unwrap() = String::new();
     if mode == "vpn" {
         let _ = routing::teardown_after_tun(&app);
+    }
+    if mode == "socks5" {
+        match crate::core::sysproxy::disable() {
+            Ok(()) => {
+                let _ = app.emit("core-log", "[proxy] 系统代理已还原为直连".to_string());
+            }
+            Err(e) => {
+                let _ = app.emit("core-log", format!("[proxy] 系统代理还原失败: {e}"));
+            }
+        }
     }
 
     let _ = app.emit("core-status", "disconnected");
@@ -318,6 +360,14 @@ pub fn recover_network(app: AppHandle) -> Result<String, String> {
         let _ = s.kill();
     }
     let _ = app.emit("core-status", "disconnected");
+
+    // Make sure the system proxy is never left pointing at a dead core.
+    let mode = app.state::<AppState>().session_mode.lock().unwrap().clone();
+    if mode == "socks5" {
+        let _ = crate::core::sysproxy::disable();
+        *app.state::<AppState>().session_mode.lock().unwrap() = String::new();
+        let _ = app.emit("core-log", "[proxy] 系统代理已还原为直连".to_string());
+    }
 
     #[cfg(windows)]
     {

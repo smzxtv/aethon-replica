@@ -19,7 +19,7 @@ pub fn build_config(p: &ConnectParams) -> Result<Value, String> {
     let mut inbounds: Vec<Value> = Vec::new();
     match p.mode.as_str() {
         "socks5" => inbounds.push(json!({
-            "type": "socks",
+            "type": "mixed",
             "tag": "socks-in",
             "listen": "127.0.0.1",
             "listen_port": p.socks_port,
@@ -31,6 +31,8 @@ pub fn build_config(p: &ConnectParams) -> Result<Value, String> {
             "strict_route": true,
             "stack": "mixed",
             "mtu": 1500,
+            "address": ["172.19.0.1/30", "fdfe:dcba:9876::1/126"],
+            "endpoint_independent_nat": true,
         })),
         other => return Err(format!("unknown mode: {other}")),
     }
@@ -84,11 +86,30 @@ fn build_outbound(
             if let Some(flow) = params.get("flow") {
                 out["flow"] = json!(flow);
             }
+            // Apply TLS if security is "tls" or "reality".
+            let security = params.get("security").cloned().unwrap_or_else(|| "tls".into());
+            if !security.is_empty() && security != "none" {
+                apply_tls(&mut out, params);
+            }
+            // Apply transport (ws/grpc/http).
+            apply_transport(&mut out, params);
         }
         "trojan" => {
             let password = params.get("password").ok_or("trojan requires a 'password'")?;
             out["password"] = json!(password);
             apply_tls(&mut out, params);
+            apply_transport(&mut out, params);
+        }
+        "http" => {
+            // HTTP 代理出站：适用于 Cloudflare Worker / 通用 HTTP 代理。
+            // 免费 worker 域名走 443 TLS；带 sni 会自动配 server_name。
+            apply_tls(&mut out, params);
+            if let Some(username) = params.get("username") {
+                out["username"] = json!(username);
+            }
+            if let Some(password) = params.get("password") {
+                out["password"] = json!(password);
+            }
         }
         "hysteria2" => {
             let password = params.get("password").ok_or("hysteria2 requires a 'password'")?;
@@ -120,6 +141,21 @@ fn apply_tls(out: &mut Value, params: &HashMap<String, String>) {
     out["tls"] = tls;
 }
 
+fn apply_transport(out: &mut Value, params: &HashMap<String, String>) {
+    let transport_type = match params.get("transport") {
+        Some(t) if !t.is_empty() => t.as_str(),
+        _ => return, // no transport
+    };
+    let mut transport = json!({ "type": transport_type });
+    if let Some(path) = params.get("path") {
+        transport["path"] = json!(path);
+    }
+    if let Some(host) = params.get("host") {
+        transport["headers"] = json!({ "host": host });
+    }
+    out["transport"] = transport;
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -143,7 +179,7 @@ mod tests {
     fn socks5_inbound_and_listen_port() {
         let cfg = build_config(&params(HashMap::new())).unwrap();
         let inbound = &cfg["inbounds"][0];
-        assert_eq!(inbound["type"], "socks");
+        assert_eq!(inbound["type"], "mixed");
         assert_eq!(inbound["listen_port"], 1819);
         assert_eq!(cfg["route"]["final"], "proxy");
     }
@@ -155,6 +191,7 @@ mod tests {
         let cfg = build_config(&p).unwrap();
         assert_eq!(cfg["inbounds"][0]["type"], "tun");
         assert_eq!(cfg["inbounds"][0]["auto_route"], true);
+        assert!(cfg["inbounds"][0]["address"].is_array());
     }
 
     #[test]
@@ -166,6 +203,29 @@ mod tests {
         assert_eq!(out["password"], "secret");
         assert_eq!(out["server"], "example.com");
         assert_eq!(out["server_port"], 8388);
+    }
+
+    #[test]
+    fn vless_with_ws_transport() {
+        let mut p = params(HashMap::new());
+        p.protocol = "vless".into();
+        p.address = "example.com".into();
+        p.port = 443;
+        p.params.insert("uuid".into(), "abc-123".into());
+        p.params.insert("security".into(), "tls".into());
+        p.params.insert("sni".into(), "example.com".into());
+        p.params.insert("transport".into(), "ws".into());
+        p.params.insert("path".into(), "/ws".into());
+        p.params.insert("host".into(), "example.com".into());
+        let cfg = build_config(&p).unwrap();
+        let out = &cfg["outbounds"][0];
+        assert_eq!(out["type"], "vless");
+        assert_eq!(out["uuid"], "abc-123");
+        assert_eq!(out["tls"]["enabled"], true);
+        assert_eq!(out["tls"]["server_name"], "example.com");
+        assert_eq!(out["transport"]["type"], "ws");
+        assert_eq!(out["transport"]["path"], "/ws");
+        assert_eq!(out["transport"]["headers"]["host"], "example.com");
     }
 
     #[test]

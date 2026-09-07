@@ -24,6 +24,7 @@ const PROTOCOLS: { value: Protocol; label: string }[] = [
   { value: "trojan", label: "Trojan" },
   { value: "hysteria2", label: "Hysteria2" },
   { value: "tuic", label: "TUIC" },
+  { value: "http", label: "HTTP 代理 (Cloudflare/通用)" },
 ];
 
 const SCAN_MODES: { value: ScanMode; label: string }[] = [

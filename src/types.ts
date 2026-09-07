@@ -13,7 +13,8 @@ export type Protocol =
   | "vless"
   | "trojan"
   | "hysteria2"
-  | "tuic";
+  | "tuic"
+  | "http";
 
 export type ScanMode = "disabled" | "quick" | "full";
 
