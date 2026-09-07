@@ -41,6 +41,12 @@ export default function Sidebar() {
         <div className={`core-dot ${state.appInfo?.core.corePresent ? "ok" : ""}`}>
           {state.appInfo?.core.corePresent ? "核心就绪" : "核心缺失 — 运行 fetch:core"}
         </div>
+        <div className="sidebar-links">
+          <a href="https://t.me/+tVg48WK48tlkNGVl" target="_blank" rel="noreferrer">
+            💬 Telegram 群组
+          </a>
+          <span className="ad-badge">数码解码 · 技术支持</span>
+        </div>
       </div>
     </aside>
   );

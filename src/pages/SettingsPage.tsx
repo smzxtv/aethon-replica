@@ -223,6 +223,12 @@ export default function SettingsPage() {
           <dt>核心路径</dt>
           <dd>{appInfo?.core.corePath ?? "未获取"}</dd>
         </dl>
+        <div className="about-links">
+          <a href="https://t.me/+tVg48WK48tlkNGVl" target="_blank" rel="noreferrer">
+            💬 Telegram 群组
+          </a>
+          <span className="ad-badge">数码解码 · 技术支持</span>
+        </div>
       </section>
     </div>
   );
