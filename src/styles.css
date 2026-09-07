@@ -192,6 +192,33 @@ body {
   align-self: flex-start;
 }
 
+.sub-row {
+  display: flex;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.sub-input {
+  flex: 1;
+  background: var(--bg-3, rgba(255, 255, 255, 0.04));
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--text);
+  padding: 9px 12px;
+  font-size: 13px;
+}
+
+.sub-input:focus {
+  outline: none;
+  border-color: rgba(91, 140, 255, 0.55);
+}
+
+.notice.ok {
+  border-color: rgba(63, 185, 80, 0.4);
+  color: var(--green);
+  background: rgba(63, 185, 80, 0.08);
+}
+
 /* ---- content ---- */
 .content {
   flex: 1;

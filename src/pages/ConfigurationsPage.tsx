@@ -1,6 +1,7 @@
-﻿import { useState } from "react";
+import { useState } from "react";
 import { useApp } from "../store";
-import type { Protocol } from "../types";
+import { importSubscription } from "../lib/core";
+import type { Protocol, ServerProfile } from "../types";
 
 const PROTOCOLS: { value: Protocol; label: string }[] = [
   { value: "auto", label: "自动" },
@@ -15,6 +16,9 @@ const PROTOCOLS: { value: Protocol; label: string }[] = [
 export default function ConfigurationsPage() {
   const { state, dispatch } = useApp();
   const { profiles, conn } = state;
+  const [subUrl, setSubUrl] = useState("");
+  const [subBusy, setSubBusy] = useState(false);
+  const [subMsg, setSubMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [name, setName] = useState("");
@@ -60,6 +64,38 @@ export default function ConfigurationsPage() {
     }
     resetForm();
   }
+  async function runImport() {
+    const url = subUrl.trim();
+    if (!url || subBusy) return;
+    setSubBusy(true);
+    setSubMsg(null);
+    try {
+      const nodes = await importSubscription(url);
+      const existing = new Set(profiles.map((p) => `${p.protocol}|${p.address}|${p.port}|${p.name}`));
+      const fresh = nodes
+        .filter((n) => !existing.has(`${n.protocol}|${n.address}|${n.port}|${n.name}`))
+        .map((n) => ({
+          id: `sub-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          name: n.name || `${n.protocol}:${n.address}`,
+          protocol: n.protocol as ServerProfile["protocol"],
+          address: n.address,
+          port: n.port,
+          params: n.params,
+        }) as ServerProfile);
+      fresh.forEach((profile) => dispatch({ type: "add-profile", profile }));
+      if (fresh.length > 0) {
+        dispatch({ type: "select-profile", id: fresh[0].id });
+        setSubMsg({ ok: true, text: `导入成功：新增 ${fresh.length} 个节点（跳过 ${nodes.length - fresh.length} 个重复）` });
+      } else {
+        setSubMsg({ ok: false, text: `订阅解析到 ${nodes.length} 个节点，但全部已存在` });
+      }
+    } catch (e) {
+      setSubMsg({ ok: false, text: String(e) });
+    } finally {
+      setSubBusy(false);
+    }
+  }
+
   return (
     <div className="page">
       <header className="page-head">
@@ -68,6 +104,27 @@ export default function ConfigurationsPage() {
           <p className="muted">管理服务器配置文件和协议设置。</p>
         </div>
       </header>
+
+      <section className="card">
+        <div className="diag-head">
+          <h2>订阅导入</h2>
+        </div>
+        <p className="hint">粘贴 V2Ray / Clash 订阅链接，自动拉取并解析全部节点（支持 vless / trojan / ss / vmess 分享链接，重复节点自动跳过）。</p>
+        <div className="sub-row">
+          <input
+            className="sub-input"
+            value={subUrl}
+            onChange={(e) => setSubUrl(e.target.value)}
+            placeholder="https://example.com/sub?token=..."
+          />
+          <button className="primary" onClick={runImport} disabled={subBusy || !subUrl.trim()}>
+            {subBusy ? "导入中…" : "导入订阅"}
+          </button>
+        </div>
+        {subMsg && (
+          <div className={`notice ${subMsg.ok ? "ok" : "error"}`}>{subMsg.text}</div>
+        )}
+      </section>
 
       <section className="card">
         <div className="diag-head">

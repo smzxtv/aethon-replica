@@ -7,6 +7,19 @@ import type {
   ServerProfile,
 } from "../types";
 
+export interface SubscriptionNode {
+  name: string;
+  protocol: string;
+  address: string;
+  port: number;
+  params: Record<string, string>;
+}
+
+/** Fetch a subscription URL and parse all share-links into nodes. */
+export async function importSubscription(url: string): Promise<SubscriptionNode[]> {
+  return invoke<SubscriptionNode[]>("import_subscription", { url });
+}
+
 export interface CoreInfo {
   singBoxVersion: string;
   corePath: string | null;

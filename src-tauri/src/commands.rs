@@ -442,3 +442,10 @@ pub fn download_update(app: AppHandle, asset_name: String) -> Result<crate::core
 pub fn version_compare(latest: String, current: String) -> bool {
     crate::core::updater::version_gt(&latest, &current)
 }
+
+/// Fetch a subscription URL and return every parsed node. The frontend turns
+/// these into server profiles in its store.
+#[tauri::command]
+pub fn import_subscription(url: String) -> Result<Vec<crate::core::subscription::SubscriptionNode>, String> {
+    crate::core::subscription::fetch(&url)
+}

@@ -28,7 +28,8 @@ pub fn run() {
             commands::routing_cleanup,
             commands::check_for_updates,
             commands::download_update,
-            commands::version_compare
+            commands::version_compare,
+            commands::import_subscription
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
