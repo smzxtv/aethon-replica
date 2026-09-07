@@ -1,6 +1,6 @@
 [package]
 name = "aethon-replica"
-version = "1.0.0"
+version = "2.0.0"
 description = "Aethon Replica - independent Tauri v2 client for the sing-box networking core"
 authors = ["aethon-replica contributors"]
 edition = "2021"
